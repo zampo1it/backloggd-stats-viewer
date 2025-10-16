@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/app.ts",
-      "use": "@vercel/node"
+      "src": "game-stats-frontend/package.json",
+      "use": "@vercel/next"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "src/app.ts"
+      "dest": "game-stats-frontend/$1"
     }
   ]
 }

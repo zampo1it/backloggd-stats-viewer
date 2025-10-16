@@ -8,9 +8,10 @@
         "app": "node src/app.ts",
         "start": "nodemon src/app.ts",
         "test": "echo \"Error: no test specified\" && exit 1",
-        "vercel-build": "echo hello",
-        "build": "",
-        "dev": "nodemon src/app.ts"
+        "vercel-build": "cd game-stats-frontend && npm run build",
+        "build": "cd game-stats-frontend && npm run build",
+        "dev": "nodemon src/app.ts",
+        "deploy": "cd game-stats-frontend && vercel --prod"
     },
     "author": "Qewertyy <Qewertyy.irl@gmail.com>",
     "keywords": [
