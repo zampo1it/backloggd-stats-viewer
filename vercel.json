@@ -1,7 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "cd game-stats-frontend && npm run build",
-  "outputDirectory": "game-stats-frontend/.next",
-  "installCommand": "cd game-stats-frontend && npm install",
-  "framework": "nextjs"
+  "builds": [
+    {
+      "src": "src/app.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/app.ts"
+    }
+  ]
 }
