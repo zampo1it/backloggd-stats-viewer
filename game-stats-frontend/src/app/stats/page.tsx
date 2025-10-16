@@ -82,7 +82,7 @@ export default function StatsPage() {
               Game Statistics
             </h1>
             <p className="text-gray-300">
-              Analyzing {data.content?.games?.length || 0} games
+              Analyzing {(data.content && 'games' in data.content && Array.isArray((data.content as any).games)) ? (data.content as any).games.length : 0} games
             </p>
           </div>
           <div className="flex gap-3">
