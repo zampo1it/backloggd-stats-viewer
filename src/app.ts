@@ -29,6 +29,10 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 
 app.all("*", routers);
 
-app.listen(8080, () => {
-  console.log(`Server started Listening at 8080`);
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
+  console.log(`Server started Listening at ${PORT}`);
 });
+
+export default app;

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 import type { ApiResponse } from '@/types'
+import { API_URL } from '@/lib/config'
 
 export default function BackloggdImporter() {
   const [activeTab, setActiveTab] = useState<'link' | 'json'>('link')
@@ -72,7 +73,7 @@ export default function BackloggdImporter() {
       setLoadingMessage('Fetching your profile...')
       
       const userResponse = await axios.get<ApiResponse>(
-        `http://localhost:8080/user/${username}`
+        `${API_URL}/user/${username}`
       )
       
       console.log('User response:', userResponse.data)
@@ -86,7 +87,7 @@ export default function BackloggdImporter() {
       
       // Симулируем обработку игр
       const gamesResponse = await axios.get<ApiResponse>(
-        `http://localhost:8080/user/${username}/games?all=true`
+        `${API_URL}/user/${username}/games?all=true`
       )
       
       console.log('Games response:', gamesResponse.data)
