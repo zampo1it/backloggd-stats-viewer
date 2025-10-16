@@ -30,7 +30,7 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
-// Test endpoints
+// Test endpoints - must be before app.all("*", routers)
 app.get("/test", (req: Request, res: Response) => {
   res.json({ message: "API is working!", timestamp: new Date().toISOString() });
 });
@@ -43,7 +43,21 @@ app.get("/cors-test", (req: Request, res: Response) => {
   });
 });
 
+// Health check endpoint
+app.get("/health", (req: Request, res: Response) => {
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 app.all("*", routers);
+
+// 404 handler - must be after all routes
+app.use("*", (req: Request, res: Response) => {
+  res.status(404).json({ message: "not found", code: 0 });
+});
 
 const PORT = process.env.PORT || 8080;
 
