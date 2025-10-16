@@ -1,10 +1,14 @@
 'use client'
-// @ts-nocheck
 
 import { useState, useMemo } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ComposedChart } from 'recharts'
-import type { ApiResponse, Game } from '@/types'
+import type { ApiResponse, Game, GamesResponse } from '@/types'
 import Image from 'next/image'
+
+// Type guard function to check if data contains games
+const isGamesResponse = (data: ApiResponse): data is { message: string; code: number; content: GamesResponse } => {
+  return data.content && typeof data.content === 'object' && 'games' in data.content;
+};
 
 interface YearData {
   year: number
@@ -73,7 +77,7 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
 
   // Извлекаем username из URL первой игры или используем значение по умолчанию
   const username = useMemo(() => {
-    if (data.content?.games && data.content.games.length > 0) {
+    if (isGamesResponse(data) && data.content.games.length > 0) {
       const firstGameUrl = data.content.games[0].url
       if (firstGameUrl) {
         // URL формата: https://backloggd.com/u/USERNAME/games/...
@@ -84,16 +88,17 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       }
     }
     return 'zampo1it' // значение по умолчанию
-  }, [data.content?.games])
+  }, [data])
 
   const yearData = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return []
+    if (!isGamesResponse(data)) {
+      return []
+    }
 
     // Группируем игры по годам
     const yearMap = new Map<number, { count: number; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
-      data.content.games.forEach((game: Game) => {
+    data.content.games.forEach((game: Game) => {
       if (game.releaseDate) {
         // Парсим дату в формате DD/MM/YYYY
         const dateParts = game.releaseDate.split('/')
@@ -114,7 +119,6 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
         }
       }
     })
-    }
 
     // Преобразуем в массив и сортируем по году
     const result: YearData[] = Array.from(yearMap.entries())
@@ -128,15 +132,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.year - b.year)
 
     return result
-  }, [data.content?.games])
+  }, [data])
 
   const yearsWithGames = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return []
+    if (!isGamesResponse(data)) return []
 
     // Группируем игры по годам
     const yearMap = new Map<number, { games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.releaseDate) {
         // Парсим дату в формате DD/MM/YYYY
@@ -174,15 +178,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .slice(0, 3) // Берем топ 3 года
 
     return result
-  }, [data.content?.games])
+  }, [data])
 
   const lowestYearsWithGames = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return []
+    if (!isGamesResponse(data)) return []
 
     // Группируем игры по годам
     const yearMap = new Map<number, { games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.releaseDate) {
         // Парсим дату в формате DD/MM/YYYY
@@ -221,14 +225,14 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .slice(0, 3) // Берем топ 3 года с самым низким рейтингом
 
     return result
-  }, [data.content?.games])
+  }, [data])
 
   const statusStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return []
+    if (!isGamesResponse(data)) return []
 
     const statusMap = new Map<string, { count: number; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.status) {
         const status = game.status.toLowerCase()
@@ -265,14 +269,14 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => b.avgRating - a.avgRating) // Сортируем по убыванию рейтинга
 
     return result
-  }, [data.content?.games])
+  }, [data])
 
   const developerStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     const developerMap = new Map<string, { count: number; ratings: number[]; games: Game[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       // Получаем разработчиков только из IGDB данных
       const developers: string[] = []
@@ -342,15 +346,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .slice(0, 10) // Топ 10 разработчиков
 
     return { played: playedDevelopers, rated: ratedDevelopers, lowest: lowestDevelopers }
-  }, [data.content?.games, minDeveloperGames])
+  }, [data, minDeveloperGames])
 
   const keywordsStats = useMemo(() => {
-    if (!data.content?.games) return { common: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { common: [], rated: [], lowest: [] }
 
     // Собираем все ключевые слова с информацией об играх
     const keywordMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.keywords_readable) {
         game.igdbgameinfo.keywords_readable.forEach((keyword: string) => {
@@ -411,15 +415,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .slice(0, 30) // Топ 30 с самым низким рейтингом
 
     return { common: commonKeywords, rated: ratedKeywords, lowest: lowestKeywords }
-  }, [data.content?.games])
+  }, [data])
 
   const genresStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все жанры с информацией об играх
     const genreMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.genres_readable) {
         game.igdbgameinfo.genres_readable.forEach((genre: string) => {
@@ -471,15 +475,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating)
 
     return { played: playedGenres, rated: ratedGenres, lowest: lowestGenres }
-  }, [data.content?.games])
+  }, [data])
 
   const gameModesStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все игровые режимы с информацией об играх
     const gameModeMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.game_modes_readable) {
         game.igdbgameinfo.game_modes_readable.forEach((gameMode: string) => {
@@ -531,15 +535,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating)
 
     return { played: playedGameModes, rated: ratedGameModes, lowest: lowestGameModes }
-  }, [data.content?.games])
+  }, [data])
 
   const gameEnginesStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все игровые движки с информацией об играх
     const gameEngineMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.game_engines_readable) {
         game.igdbgameinfo.game_engines_readable.forEach((gameEngine: string) => {
@@ -592,15 +596,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating) // Сортировка по возрастанию рейтинга
 
     return { played: playedGameEngines, rated: ratedGameEngines, lowest: lowestGameEngines }
-  }, [data.content?.games])
+  }, [data])
 
   const themesStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все темы с информацией об играх
     const themeMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.themes_readable) {
         game.igdbgameinfo.themes_readable.forEach((theme: string) => {
@@ -653,15 +657,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating) // Сортировка по возрастанию рейтинга
 
     return { played: playedThemes, rated: ratedThemes, lowest: lowestThemes }
-  }, [data.content?.games])
+  }, [data])
 
   const seriesStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все серии с информацией об играх
     const seriesMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.series_readable) {
         game.igdbgameinfo.series_readable.forEach((series: string) => {
@@ -714,15 +718,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating) // Сортировка по возрастанию рейтинга
 
     return { played: playedSeries, rated: ratedSeries, lowest: lowestSeries }
-  }, [data.content?.games])
+  }, [data])
 
   const franchisesStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все франшизы с информацией об играх
     const franchiseMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.igdbgameinfo?.franchises_readable) {
         game.igdbgameinfo.franchises_readable.forEach((franchise: string) => {
@@ -775,15 +779,15 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating) // Сортировка по возрастанию рейтинга
 
     return { played: playedFranchises, rated: ratedFranchises, lowest: lowestFranchises }
-  }, [data.content?.games])
+  }, [data])
 
   const platformsStats = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { played: [], rated: [], lowest: [] }
+    if (!isGamesResponse(data)) return { played: [], rated: [], lowest: [] }
 
     // Собираем все платформы с информацией об играх
     const platformMap = new Map<string, { count: number; games: Game[]; ratings: number[] }>()
 
-    if (data.content && 'games' in data.content && Array.isArray(data.content.games)) {
+    if (isGamesResponse(data)) {
       data.content.games.forEach((game: Game) => {
       if (game.platforms && Array.isArray(game.platforms)) {
         game.platforms.forEach((platform: string) => {
@@ -836,11 +840,11 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       .sort((a, b) => a.avgRating - b.avgRating) // Сортировка по возрастанию рейтинга
 
     return { played: playedPlatforms, rated: ratedPlatforms, lowest: lowestPlatforms }
-  }, [data.content?.games])
+  }, [data])
 
   // Данные для графика mastered игр
   const masteredGamesData = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return []
+    if (!isGamesResponse(data)) return []
 
     // Фильтруем только mastered игры
     const masteredGames = data.content.games.filter(game => 
@@ -875,13 +879,13 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
     })
 
     return chartData
-  }, [data.content?.games])
+  }, [data])
 
   // Данные для ремейков
   const remakesData = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { all: [], highest: [], lowest: [] }
+    if (!isGamesResponse(data)) return { all: [], highest: [], lowest: [] }
 
-    const remakes = data.content.games.filter(game => game.isRemake === 'yes')
+    const remakes = isGamesResponse(data) ? data.content.games.filter(game => game.isRemake === 'yes') : []
     
     const allRemakes = remakes.map(game => ({
       ...game,
@@ -898,13 +902,13 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       highest: highestRated,
       lowest: lowestRated
     }
-  }, [data.content?.games])
+  }, [data])
 
   // Данные для ремастеров
   const remastersData = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { all: [], highest: [], lowest: [] }
+    if (!isGamesResponse(data)) return { all: [], highest: [], lowest: [] }
 
-    const remasters = data.content.games.filter(game => game.isRemaster === 'yes')
+    const remasters = isGamesResponse(data) ? data.content.games.filter(game => game.isRemaster === 'yes') : []
     
     const allRemasters = remasters.map(game => ({
       ...game,
@@ -921,13 +925,13 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       highest: highestRated,
       lowest: lowestRated
     }
-  }, [data.content?.games])
+  }, [data])
 
   // Данные для расширений
   const extensionsData = useMemo(() => {
-    if (!data.content || !('games' in data.content) || !data.content.games) return { all: [], highest: [], lowest: [] }
+    if (!isGamesResponse(data)) return { all: [], highest: [], lowest: [] }
 
-    const extensions = data.content.games.filter(game => game.isExpansion === 'yes')
+    const extensions = isGamesResponse(data) ? data.content.games.filter(game => game.isExpansion === 'yes') : []
     
     const allExtensions = extensions.map(game => ({
       ...game,
@@ -944,7 +948,7 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
       highest: highestRated,
       lowest: lowestRated
     }
-  }, [data.content?.games])
+  }, [data])
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -1054,7 +1058,7 @@ export default function StatsViewer({ data }: { data: ApiResponse }) {
             <div className="bg-gray-700 rounded-lg p-4">
               <h3 className="text-gray-400 text-sm font-medium mb-1">Total Games</h3>
               <p className="text-2xl font-bold text-white">
-                {data.content?.games?.length || 0}
+                {isGamesResponse(data) ? data.content.games.length : 0}
               </p>
             </div>
             

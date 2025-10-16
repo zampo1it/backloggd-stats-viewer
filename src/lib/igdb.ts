@@ -45,22 +45,18 @@ async function searchGameByName(gameName: string): Promise<number | null> {
       return null;
     }
 
-    // Use apicalypse for consistent POST requests
-    const apicalypse = (await import("apicalypse")).default;
-    const response = await apicalypse({
-      queryMethod: 'body',
-      method: 'post',
-      baseURL: IGDB_BASE_URL,
-      headers: {
-        "Client-ID": IGDB_CLIENT_ID!,
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "text/plain"
+    // Use direct axios request instead of apicalypse
+    const response = await axios.post(
+      `${IGDB_BASE_URL}/games`,
+      `search "${gameName}"; fields id,name; limit 1;`,
+      {
+        headers: {
+          "Client-ID": IGDB_CLIENT_ID!,
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "text/plain"
+        }
       }
-    })
-    .search(gameName)
-    .fields('id,name')
-    .limit(1)
-    .request('/games');
+    );
 
     if (response.data && response.data.length > 0) {
       return response.data[0].id;
@@ -283,32 +279,18 @@ async function getAllGameInfo(gameId: number): Promise<any | null> {
       return null;
     }
 
-    // ChatGPT approach: Get readable names directly in one query
-    const apicalypse = (await import("apicalypse")).default;
-    const response = await apicalypse({
-      queryMethod: 'body',
-      method: 'post', // ВАЖНО: IGDB требует POST запросы
-      baseURL: IGDB_BASE_URL,
-      headers: {
-        "Client-ID": IGDB_CLIENT_ID!,
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "text/plain"
+    // Use direct axios request instead of apicalypse
+    const response = await axios.post(
+      `${IGDB_BASE_URL}/games`,
+      `fields name,genres.name,game_modes.name,themes.name,involved_companies.developer,involved_companies.company.name,collections.name,franchises.name,game_engines.name,keywords.name; where id = ${gameId};`,
+      {
+        headers: {
+          "Client-ID": IGDB_CLIENT_ID!,
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "text/plain"
+        }
       }
-    })
-    .fields(`
-      name,
-      genres.name,
-      game_modes.name,
-      themes.name,
-      involved_companies.developer,
-      involved_companies.company.name,
-      collections.name,
-      franchises.name,
-      game_engines.name,
-      keywords.name
-    `)
-    .where(`id = ${gameId}`)
-    .request('/games');
+    );
 
     if (response.data && response.data.length > 0) {
       const game = response.data[0];

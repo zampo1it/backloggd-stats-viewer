@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import axios from 'axios'
 import type { ApiResponse } from '@/types'
 
@@ -14,8 +14,6 @@ export default function BackloggdImporter() {
   const [userInfo, setUserInfo] = useState<any>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
-  const [isRateLimited, setIsRateLimited] = useState(false)
-  const [lastProcessedGame, setLastProcessedGame] = useState<any>(null)
 
   const extractUsername = (url: string): string | null => {
     // Поддерживаем форматы:
@@ -50,60 +48,13 @@ export default function BackloggdImporter() {
     return null;
   }
 
-  // Функции для генерации сообщений
-  const generateGameMessage = (game: any) => {
-    const messages = [
-      game.rating ? `You rated ${game.name} ${game.rating} out of 10? You nuts?` : `You played ${game.name}? Good choice!`,
-      `You played ${game.name}? Good choice!`,
-      `Found ${game.name} in your collection. Pathetic!`,
-      `Analyzing ${game.name}... Do you know this game is for idiots?`,
-      `Processing ${game.name} - solid game!`,
-      `You completed ${game.name}? What a waste of time!`,
-      game.rating ? `Found ${game.name} with ${game.rating}/10 rating. Really?` : `Found ${game.name} without rating. Coward!`,
-      `Analyzing ${game.name}... that's a classic!`,
-      `Processing ${game.name} - great taste!`,
-      `You played ${game.name}? Excellent choice!`,
-      `I didn't want to tell you, but ${game.name} sucks.`,
-      `According to statistics, 95% of autistic people play ${game.name}`,
-      `I see ${game.name} is made on ${game.igdbgameinfo?.game_engines_readable?.[0] || 'unknown engine'}! Are you experiencing any lag?`
-    ];
-    return messages[Math.floor(Math.random() * messages.length)];
-  }
 
-  const generateRateLimitedMessage = () => {
-    return "Oh, no. Backloggd thinks we're DDoSing it. The number of requests per second has been reduced, and this may take a little longer";
-  }
-
-  const generateFrozenMessage = () => {
-    return "The site isn't frozen! The scripts are just waiting for Backloggd to let us through again";
-  }
-
-  // Мониторинг загрузки
-  useEffect(() => {
-    if (!loading) return;
-
-    let frozenTimeout: NodeJS.Timeout;
-
-    // Если через 30 секунд ничего не меняется, показываем frozen message
-    frozenTimeout = setTimeout(() => {
-      if (loading && !isRateLimited) {
-        setIsRateLimited(true);
-        setLoadingMessage(generateFrozenMessage());
-      }
-    }, 30000);
-
-    return () => {
-      if (frozenTimeout) clearTimeout(frozenTimeout);
-    };
-  }, [loading, isRateLimited]);
 
   const handleFetchFromBackloggd = async () => {
     setError('')
     setResult(null)
     setUserInfo(null)
     setLoadingMessage('')
-    setIsRateLimited(false)
-    setLastProcessedGame(null)
     
     const username = extractUsername(backloggdUrl)
     
@@ -140,53 +91,16 @@ export default function BackloggdImporter() {
       
       console.log('Games response:', gamesResponse.data)
       
-      // Симулируем анализ игр
-      if (gamesResponse.data.content?.games) {
-        const games = gamesResponse.data.content.games;
-        console.log(`Found ${games.length} games to analyze`);
-        
-        // Показываем первые несколько игр для анализа
-        let processedCount = 0;
-        const maxGamesToShow = Math.min(10, games.length); // Показываем максимум 10 игр
-        
-        const processGames = () => {
-          if (processedCount < maxGamesToShow) {
-            const game = games[processedCount];
-            console.log(`Processing game ${processedCount + 1}/${maxGamesToShow}: ${game.name}`);
-            setLastProcessedGame(game);
-            setLoadingMessage(generateGameMessage(game));
-            processedCount++;
-            
-            // Симулируем задержку обработки
-            setTimeout(processGames, 3000);
-          } else {
-            setResult(gamesResponse.data);
-            setLoadingMessage('Analysis complete! Redirecting to stats...')
-            
-            // Сохраняем данные в localStorage и перенаправляем на страницу статистики
-            localStorage.setItem('backloggdData', JSON.stringify(gamesResponse.data))
-            localStorage.setItem('userInfo', JSON.stringify(userResponse.data.content))
-            
-            setTimeout(() => {
-              window.location.href = '/stats'
-            }, 1000)
-          }
-        };
-        
-        // Начинаем анализ через 1 секунду
-        setTimeout(processGames, 1000);
-      } else {
-        setResult(gamesResponse.data)
-        setLoadingMessage('Analysis complete! Redirecting to stats...')
-        
-        // Сохраняем данные в localStorage и перенаправляем на страницу статистики
-        localStorage.setItem('backloggdData', JSON.stringify(gamesResponse.data))
-        localStorage.setItem('userInfo', JSON.stringify(userResponse.data.content))
-        
-        setTimeout(() => {
-          window.location.href = '/stats'
-        }, 1000)
-      }
+      // Сохраняем данные и сразу переходим к статистике
+      console.log('Games loaded successfully, redirecting to stats...')
+      setLoadingMessage('Data loaded! Redirecting to stats...')
+      
+      // Сохраняем данные в localStorage
+      localStorage.setItem('backloggdData', JSON.stringify(gamesResponse.data))
+      localStorage.setItem('userInfo', JSON.stringify(userResponse.data.content))
+      
+      // Мгновенный переход к статистике
+      window.location.href = '/stats'
     } catch (err: any) {
       console.error('Error during fetch:', err)
       setError(err.response?.data?.message || err.message || 'Failed to fetch data')
@@ -442,16 +356,7 @@ export default function BackloggdImporter() {
               {loading && loadingMessage && (
                 <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500 rounded-lg">
                   <p className="text-blue-300 text-sm font-medium">
-                    {isRateLimited ? generateRateLimitedMessage() : loadingMessage}
-                  </p>
-                </div>
-              )}
-              
-              {/* Game Analysis Messages */}
-              {loading && lastProcessedGame && !isRateLimited && (
-                <div className="mt-4 p-3 bg-green-500/20 border border-green-500 rounded-lg">
-                  <p className="text-green-300 text-sm font-medium">
-                    {generateGameMessage(lastProcessedGame)}
+                    {loadingMessage}
                   </p>
                 </div>
               )}
@@ -486,9 +391,9 @@ export default function BackloggdImporter() {
               <div className="bg-gray-700 rounded-lg p-4 text-gray-300">
                 <p className="text-lg">
                   <span className="font-semibold">Total Games:</span>{' '}
-                  {result.content.games.length}
+                  {'games' in result.content && Array.isArray(result.content.games) ? result.content.games.length : 'N/A'}
                 </p>
-                {result.content.pagination && (
+                {'pagination' in result.content && result.content.pagination && (
                   <p className="text-sm text-gray-400">
                     Pages: {result.content.pagination.currentPage} of{' '}
                     {result.content.pagination.totalPages}
