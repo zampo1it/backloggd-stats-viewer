@@ -4,6 +4,7 @@ import axios from "axios";
 import type { Game, Company, Genre, GameMode, Theme, Franchise, GameEngine, Keyword, Collection } from "igdb-api-types";
 import { convertIdsToNames, convertCompanyIds, convertFranchiseIds, convertGameEngineIds, convertKeywordIds, convertCollectionIds } from "../utils/igdb-mapper";
 
+
 // IGDB API configuration
 const IGDB_CLIENT_ID = process.env.IGDB_CLIENT_ID;
 const IGDB_CLIENT_SECRET = process.env.IGDB_CLIENT_SECRET;
