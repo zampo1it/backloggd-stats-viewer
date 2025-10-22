@@ -1,17 +1,10 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "src/app.ts",
-      "use": "@vercel/node"
-    }
-  ],
+  "regions": ["fra1", "iad1"],
+  "functions": {
+    "api/index.ts": { "runtime": "nodejs20.x", "memory": 1024 }
+  },
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/app.ts"
-    }
-  ],
-  "buildCommand": "npm install",
-  "installCommand": "npm install"
+    { "src": "/(.*)", "dest": "/api/index.ts" }
+  ]
 }

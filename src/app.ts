@@ -96,8 +96,10 @@ app.use("*", (req: Request, res: Response) => {
 
 const PORT = process.env.PORT || 8080;
 
-app.listen(PORT, () => {
-  console.log(`Server started Listening at ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server started Listening at ${PORT}`);
+  });
+}
 
 export default app;
