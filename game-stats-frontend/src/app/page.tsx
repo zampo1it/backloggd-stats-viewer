@@ -11,7 +11,7 @@ export default function Home() {
             Backloggd Stats Viewer
           </h1>
           <p className="text-gray-300 text-lg">
-            Import your gaming data and explore your collection
+            Import your gaming data and explore your collection!
           </p>
         </div>
         
