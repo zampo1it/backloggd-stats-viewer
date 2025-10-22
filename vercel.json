@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "regions": ["fra1", "iad1"],
+  "regions": ["fra1", "cdg1", "hnd1", "gru1", "iad1"],
   "functions": {
     "api/index.ts": { "runtime": "nodejs20.x", "memory": 1024 }
   },

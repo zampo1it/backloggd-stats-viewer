@@ -1,225 +1,85 @@
-import axios, { Axios, AxiosError } from "axios";
+import cfg from "../config";
+import axios from "axios";
 import { load } from "cheerio";
-import config from "../config";
-import { favoriteGames, recentlyPlayed, userInfo, gamesResponse } from "../types";
-import {
-  extractBadges,
-  extractGame,
-  extractRecentReviews,
-  extractGamesFromPage,
-  getTotalPages,
-  getGameDetails,
-} from "../utils/game";
-import { axiosWithRetry } from "../utils/axios-with-retry";
 
-async function getUserInfo(
-  username: string
-): Promise<userInfo | { error: string; status: number }> {
-  const referer = `${config.baseUrl}/search/users/${username}`;
-  const response = await axiosWithRetry({
-    method: 'get',
-    url: `${config.baseUrl}/u/${username}`,
-    headers: {
-      ...config.headers,
-      "Turbolinks-Referrer": referer,
-      Referer: referer,
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// 1) Прокси (опционально). Добавь SCRAPER_API_KEY в ENV на Vercel — и включится.
+const withProxy = (url: string) => {
+  const key = process.env.SCRAPER_API_KEY;
+  return key
+    ? `https://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(url)}`
+    : url;
+};
+
+async function fetchPage(url: string) {
+  const r = await axios.get(withProxy(url), {
+    headers: cfg.headers,           // важны «браузерные» заголовки
+    validateStatus: () => true,
+    maxRedirects: 5,
+  });
+
+  const html = typeof r.data === "string" ? r.data : "";
+  const title = (html.match(/<title>(.*?)<\/title>/i)?.[1] || "").trim();
+
+  // Bunny Shield / антибот
+  if (
+    r.status === 403 || r.status === 429 ||
+    title.includes("Establishing a secure connection") ||
+    html.includes(".bunny-shield/assets/challenge")
+  ) {
+    return { blocked: true, status: r.status, title, html };
+  }
+
+  return { blocked: false, status: r.status, html };
+}
+
+function parseGamesFromHtml(html: string) {
+  const $ = load(html);
+  // TODO: подставь свои селекторы (ниже — «пустышка»):
+  const games: any[] = [];
+  // $('.game-card-selector').each((_i, el) => { ... games.push({...}) });
+  // рассчитaй pagination при необходимости
+  return { games, pagination: { currentPage: 1, totalPages: 1, totalGames: games.length, hasNext: false, hasPrev: false } };
+}
+
+export async function getUserGames(username: string, page = 1, getAll = false) {
+  const firstUrl = `${cfg.baseUrl}/u/${username}/games?page=${page}`;
+  const first = await fetchPage(firstUrl);
+  if (first.blocked) {
+    return { error: "Blocked by anti-bot (Bunny Shield)", status: 429 };
+  }
+
+  // Разбираем первую страницу
+  const firstParsed = parseGamesFromHtml(first.html);
+  let allGames = [...firstParsed.games];
+  let currentPage = page;
+  let totalPages = firstParsed.pagination.totalPages ?? page;
+
+  // Если нужно собрать все страницы — идём дальше с паузами
+  if (getAll && totalPages > currentPage) {
+    for (let p = currentPage + 1; p <= totalPages; p++) {
+      await sleep(400 + Math.random() * 600); // вежливая задержка
+      const url = `${cfg.baseUrl}/u/${username}/games?page=${p}`;
+      const res = await fetchPage(url);
+      if (res.blocked) {
+        // при блоке не кэшируем пустоту — возвращаем ошибку
+        return { error: "Blocked by anti-bot (Bunny Shield)", status: 429 };
+      }
+      const parsed = parseGamesFromHtml(res.html);
+      allGames.push(...parsed.games);
+    }
+  }
+
+  // Возвращаем единый объект (подстрой под свой тип gamesResponse)
+  return {
+    games: allGames,
+    pagination: {
+      currentPage,
+      totalPages,
+      totalGames: allGames.length,
+      hasNext: currentPage < totalPages,
+      hasPrev: currentPage > 1,
     },
-  }).catch((err) => err);
-
-  if (response instanceof AxiosError) {
-    console.log(response.response?.status);
-    let error, status;
-    if (response.response?.status === 404) {
-      error = "User not found";
-      status = 404;
-    } else {
-      error = response.message;
-      status = response.response?.status || 500;
-    }
-    return {
-      error: error,
-      status: status,
-    };
-  }
-  const $ = load(response.data);
-  let userinfo = {} as userInfo;
-  userinfo.username = username;
-  userinfo.profile =
-    $("meta[property='og:image']").attr("content") ||
-    "https://backloggd.b-cdn.net/no_avatar.jpg";
-  const hasBio = $("#bio-body").has("p").length === 0;
-  userinfo.bio = hasBio ? $("#bio-body").text().trim() : "Nothing here!";
-  
-  // Извлекаем количество игр из элемента <p class="mb-0 subtitle-text">1228 Games</p>
-  const gamesCountElement = $("p.mb-0.subtitle-text");
-  if (gamesCountElement.length > 0) {
-    const gamesText = gamesCountElement.text().trim();
-    const match = gamesText.match(/^(\d+)\s+Games?/);
-    if (match) {
-      userinfo.gamescount = parseInt(match[1]);
-      console.log(`Found games count: ${userinfo.gamescount}`);
-    }
-  }
-  const favoriteGames: favoriteGames[] = [];
-  const recentlyPlayed: recentlyPlayed[] = [];
-  const favoritesDiv = $("#profile-favorites").children();
-  const recentlyPlayedDiv = $("#profile-journal").children();
-  const userStatsDiv = $("#profile-stats").children();
-  const userBadgesDiv = $("#profile-sidebar").children();
-  const userStats: { [key: string]: number } = {};
-  userStatsDiv.each((i, el) => {
-    const value = $(el).children("h1").text();
-    const key = $(el).children("h4").text();
-    userStats[key] = parseInt(value);
-  });
-  favoritesDiv.each((_i, el) => {
-    const game = extractGame($(el));
-    if (game) {
-      const mostFavorite = el.attribs.class.includes("ultimate_fav");
-      favoriteGames.push({
-        ...game,
-        ...(mostFavorite && { mostFavorite }),
-      });
-    }
-  });
-  recentlyPlayedDiv.each((i, el) => {
-    const game = extractGame($(el));
-    if (game) {
-      recentlyPlayed.push({ ...game });
-    }
-  });
-  userinfo.badges = extractBadges($, userBadgesDiv);
-  userinfo.favoriteGames = favoriteGames;
-  userinfo.recentlyPlayed = recentlyPlayed;
-  userinfo.recentlyReviewed = extractRecentReviews($, $("div.row.mb-3"));
-  return { ...userinfo, ...userStats };
+  };
 }
-
-async function getUserGames(
-  username: string,
-  page: number = 1,
-  getAllPages: boolean = false
-): Promise<gamesResponse | { error: string; status: number }> {
-  try {
-    console.log(`===== getUserGames called for ${username}, page ${page} =====`);
-    
-    const referer = `${config.baseUrl}/search/users/${username}`;
-    const url = `${config.baseUrl}/u/${username}/games?page=${page}`;
-    
-    const response = await axiosWithRetry({
-      method: 'get',
-      url: url,
-      headers: {
-        ...config.headers,
-        "Turbolinks-Referrer": referer,
-        Referer: referer,
-      },
-    });
-
-    const $ = load(response.data);
-    
-    // Извлекаем игры с текущей страницы
-    let games = extractGamesFromPage($, $("body"));
-    
-    console.log(`Extracted ${games.length} games from page`);
-    console.log(`Now fetching details for ${games.length} games...`);
-    
-    // Получаем дополнительные данные для каждой игры
-    games = await Promise.all(
-      games.map(async (game) => {
-        if (game.url) {
-          const details = await getGameDetails(game.url, username, game.name, game.id);
-          return { ...game, ...details };
-        }
-        return game;
-      })
-    );
-    
-    console.log(`Finished fetching game details`);
-    
-    if (getAllPages) {
-      // Получаем общее количество страниц
-      const totalPages = getTotalPages($);
-      
-      // Собираем игры со всех страниц
-      const allGames = [...games];
-      
-      for (let currentPage = 2; currentPage <= totalPages; currentPage++) {
-        try {
-          const nextUrl = `${config.baseUrl}/u/${username}/games?page=${currentPage}`;
-          const nextResponse = await axiosWithRetry({
-            method: 'get',
-            url: nextUrl,
-            headers: {
-              ...config.headers,
-              "Turbolinks-Referrer": referer,
-              Referer: referer,
-            },
-          });
-          
-          const next$ = load(nextResponse.data);
-          let nextPageGames = extractGamesFromPage(next$, next$("body"));
-          
-          // Получаем дополнительные данные для каждой игры
-          nextPageGames = await Promise.all(
-            nextPageGames.map(async (game) => {
-              if (game.url) {
-                const details = await getGameDetails(game.url, username, game.name, game.id);
-                return { ...game, ...details };
-              }
-              return game;
-            })
-          );
-          
-          allGames.push(...nextPageGames);
-          
-          // Небольшая задержка между запросами
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (err) {
-          console.log(`Failed to fetch page ${currentPage}:`, err);
-          break;
-        }
-      }
-      
-      return {
-        games: allGames,
-        pagination: {
-          currentPage: 1,
-          totalPages,
-          totalGames: allGames.length,
-          hasNext: false,
-          hasPrev: false,
-        },
-      };
-    } else {
-      // Возвращаем только текущую страницу
-      const totalPages = getTotalPages($);
-      
-      return {
-        games,
-        pagination: {
-          currentPage: page,
-          totalPages,
-          totalGames: games.length,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
-        },
-      };
-    }
-  } catch (error) {
-    if (error instanceof AxiosError) {
-      let errorMessage, status;
-      if (error.response?.status === 404) {
-        errorMessage = "User not found";
-        status = 404;
-      } else {
-        errorMessage = error.message;
-        status = error.response?.status || 500;
-      }
-      return { error: errorMessage, status };
-    }
-    return { error: "Unknown error occurred", status: 500 };
-  }
-}
-
-export { getUserInfo, getUserGames };
